@@ -43,7 +43,11 @@ export const Navbar = () => {
 
           {/* CTA Button */}
           <div className="hidden md:block">
-            <Button variant="default" size="default">
+            <Button 
+              variant="default" 
+              size="default"
+              onClick={() => document.getElementById("detection")?.scrollIntoView({ behavior: "smooth" })}
+            >
               Try Detection
             </Button>
           </div>
@@ -76,7 +80,14 @@ export const Navbar = () => {
                 </a>
               ))}
               <div className="pt-2">
-                <Button variant="default" className="w-full">
+                <Button 
+                  variant="default" 
+                  className="w-full"
+                  onClick={() => {
+                    setMobileMenuOpen(false);
+                    document.getElementById("detection")?.scrollIntoView({ behavior: "smooth" });
+                  }}
+                >
                   Try Detection
                 </Button>
               </div>
