@@ -10,15 +10,36 @@ interface DetectionResult {
   prevention: string;
 }
 
-const mockResults: Record<string, DetectionResult> = {
-  default: {
+const diseaseDatabase: DetectionResult[] = [
+  {
     diseaseName: "Leaf Rust",
     severity: "Medium",
     confidence: 92.5,
     treatment: "Apply fungicides containing propiconazole or tebuconazole. Remove infected leaves immediately.",
     prevention: "Use resistant wheat varieties. Ensure proper spacing for air circulation. Avoid excessive nitrogen fertilization.",
   },
-};
+  {
+    diseaseName: "Stem Rust",
+    severity: "High",
+    confidence: 88.3,
+    treatment: "Apply triazole-based fungicides immediately. Remove and destroy infected plants to prevent spread.",
+    prevention: "Plant resistant varieties. Monitor fields regularly during warm, humid weather. Implement crop rotation.",
+  },
+  {
+    diseaseName: "Powdery Mildew",
+    severity: "Low",
+    confidence: 94.7,
+    treatment: "Apply sulfur-based fungicides or systemic fungicides like triadimefon. Improve air circulation.",
+    prevention: "Avoid excessive nitrogen fertilization. Ensure proper plant spacing. Use resistant wheat varieties.",
+  },
+  {
+    diseaseName: "Septoria Leaf Blotch",
+    severity: "Medium",
+    confidence: 89.1,
+    treatment: "Apply fungicides containing azoxystrobin or propiconazole at early symptoms. Remove crop debris.",
+    prevention: "Use certified disease-free seeds. Practice crop rotation. Avoid overhead irrigation.",
+  },
+];
 
 export const DetectionSection = () => {
   const [isDragging, setIsDragging] = useState(false);
@@ -82,7 +103,15 @@ export const DetectionSection = () => {
     
     clearInterval(progressInterval);
     setScanProgress(100);
-    setResult(mockResults.default);
+    
+    // Randomly select a disease from the database to simulate AI detection
+    const randomIndex = Math.floor(Math.random() * diseaseDatabase.length);
+    const detectedDisease = {
+      ...diseaseDatabase[randomIndex],
+      // Add slight variation to confidence score
+      confidence: Math.round((diseaseDatabase[randomIndex].confidence + (Math.random() * 6 - 3)) * 10) / 10,
+    };
+    setResult(detectedDisease);
     setIsAnalyzing(false);
   };
 
