@@ -44,6 +44,7 @@ const diseaseDatabase: DetectionResult[] = [
 export const DetectionSection = () => {
   const [isDragging, setIsDragging] = useState(false);
   const [uploadedImage, setUploadedImage] = useState<string | null>(null);
+  const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [result, setResult] = useState<DetectionResult | null>(null);
   const [scanProgress, setScanProgress] = useState(0);
@@ -75,21 +76,26 @@ export const DetectionSection = () => {
   }, []);
 
   const processImage = (file: File) => {
+    setUploadedFile(file);
+
     const reader = new FileReader();
     reader.onload = (e) => {
       setUploadedImage(e.target?.result as string);
       setResult(null);
+      setScanProgress(0);
     };
     reader.readAsDataURL(file);
   };
 
   const analyzeImage = async () => {
+    if (!uploadedFile) return;
+
     setIsAnalyzing(true);
     setScanProgress(0);
-    
+
     // Simulate AI analysis with progress
     const progressInterval = setInterval(() => {
-      setScanProgress(prev => {
+      setScanProgress((prev) => {
         if (prev >= 100) {
           clearInterval(progressInterval);
           return 100;
@@ -99,24 +105,40 @@ export const DetectionSection = () => {
     }, 200);
 
     // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 2500));
-    
+    await new Promise((resolve) => setTimeout(resolve, 2500));
+
     clearInterval(progressInterval);
     setScanProgress(100);
-    
-    // Randomly select a disease from the database to simulate AI detection
-    const randomIndex = Math.floor(Math.random() * diseaseDatabase.length);
+
+    // Deterministic "demo" prediction based on the uploaded image bytes
+    let index = 0;
+    let jitter = 0;
+
+    try {
+      const buffer = await uploadedFile.arrayBuffer();
+      const digest = await crypto.subtle.digest("SHA-256", buffer);
+      const bytes = new Uint8Array(digest);
+      index = bytes[0] % diseaseDatabase.length;
+      // [-3, +3] jitter, derived from hash so same image => same result
+      jitter = (bytes[1] / 255) * 6 - 3;
+    } catch {
+      index = Math.floor(Math.random() * diseaseDatabase.length);
+      jitter = Math.random() * 6 - 3;
+    }
+
+    const base = diseaseDatabase[index];
     const detectedDisease = {
-      ...diseaseDatabase[randomIndex],
-      // Add slight variation to confidence score
-      confidence: Math.round((diseaseDatabase[randomIndex].confidence + (Math.random() * 6 - 3)) * 10) / 10,
+      ...base,
+      confidence: Math.round((base.confidence + jitter) * 10) / 10,
     };
+
     setResult(detectedDisease);
     setIsAnalyzing(false);
   };
 
   const resetDetection = () => {
     setUploadedImage(null);
+    setUploadedFile(null);
     setResult(null);
     setScanProgress(0);
   };
