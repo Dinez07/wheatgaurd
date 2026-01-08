@@ -41,10 +41,139 @@ const diseaseDatabase: DetectionResult[] = [
   },
 ];
 
+const rgbToHsv = (r: number, g: number, b: number) => {
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const d = max - min;
+
+  let h = 0;
+  if (d !== 0) {
+    switch (max) {
+      case r:
+        h = ((g - b) / d) % 6;
+        break;
+      case g:
+        h = (b - r) / d + 2;
+        break;
+      case b:
+        h = (r - g) / d + 4;
+        break;
+    }
+    h *= 60;
+    if (h < 0) h += 360;
+  }
+
+  const s = max === 0 ? 0 : d / max;
+  const v = max;
+  return { h, s, v };
+};
+
+const validateWheatLeafPhoto = async (file: File) => {
+  // NOTE: This is a lightweight demo heuristic (not real AI).
+  // It tries to reject obvious non-leaf photos (sky/people/objects) so we only show disease results for leaf-like images.
+  const canvas = document.createElement("canvas");
+  const ctx = canvas.getContext("2d", { willReadFrequently: true });
+  if (!ctx) {
+    return { ok: true as const };
+  }
+
+  let width = 96;
+  let height = 96;
+
+  try {
+    // Downscale at decode time for speed
+    const bitmap = await createImageBitmap(file, {
+      resizeWidth: width,
+      resizeHeight: height,
+      resizeQuality: "low",
+    } as any);
+
+    width = bitmap.width;
+    height = bitmap.height;
+    canvas.width = width;
+    canvas.height = height;
+
+    ctx.drawImage(bitmap, 0, 0, width, height);
+    bitmap.close();
+  } catch {
+    // If createImageBitmap fails, we allow analysis rather than hard-blocking.
+    return { ok: true as const };
+  }
+
+  const { data } = ctx.getImageData(0, 0, width, height);
+
+  let considered = 0;
+  let leafLike = 0;
+  let greenDominant = 0;
+  let blueLike = 0;
+  let neutralLike = 0;
+
+  for (let i = 0; i < data.length; i += 4) {
+    const r = data[i] / 255;
+    const g = data[i + 1] / 255;
+    const b = data[i + 2] / 255;
+    const a = data[i + 3] / 255;
+
+    if (a < 0.8) continue;
+
+    const { h, s, v } = rgbToHsv(r, g, b);
+
+    // ignore near-black / near-white pixels (background)
+    const isVeryDark = v < 0.08;
+    const isNearWhite = v > 0.92 && s < 0.12;
+    if (isVeryDark) continue;
+
+    considered += 1;
+
+    if (isNearWhite) neutralLike += 1;
+
+    const isLeafHue = h >= 15 && h <= 165; // yellow→green range
+    const isRustHue = h <= 40 || h >= 340; // orange/red range
+    const isBlueHue = h >= 190 && h <= 260; // sky-ish blues
+
+    if (isBlueHue && s > 0.18 && v > 0.2) blueLike += 1;
+
+    // Strong green dominance is a good hint for leaf close-ups
+    const isGreenDominant = g > r * 1.08 && g > b * 1.08 && s > 0.12 && v > 0.12;
+    if (isGreenDominant) greenDominant += 1;
+
+    // Accept both healthy-leaf greens/yellows and rust/orange patches, but require some saturation.
+    if ((isLeafHue && s > 0.14 && v > 0.12) || (isRustHue && s > 0.22 && v > 0.12)) {
+      leafLike += 1;
+    }
+  }
+
+  if (considered < 400) {
+    return {
+      ok: false as const,
+      message: "Image is too unclear. Please upload a sharp, close-up wheat leaf photo.",
+    };
+  }
+
+  const leafScore = leafLike / considered;
+  const greenScore = greenDominant / considered;
+  const blueScore = blueLike / considered;
+  const neutralScore = neutralLike / considered;
+
+  // Heuristic thresholds (tuned to reject obvious non-wheat / non-leaf photos).
+  const ok = (leafScore >= 0.42 || greenScore >= 0.26) && blueScore <= 0.25 && neutralScore <= 0.7;
+
+  if (!ok) {
+    return {
+      ok: false as const,
+      message:
+        "This doesn't look like a close-up wheat leaf photo. Please upload a clear wheat leaf image (close-up), not a field/sky/people/object photo.",
+    };
+  }
+
+  return { ok: true as const };
+};
+
 export const DetectionSection = () => {
   const [isDragging, setIsDragging] = useState(false);
   const [uploadedImage, setUploadedImage] = useState<string | null>(null);
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
+  const [validationError, setValidationError] = useState<string | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [result, setResult] = useState<DetectionResult | null>(null);
   const [scanProgress, setScanProgress] = useState(0);
@@ -77,6 +206,7 @@ export const DetectionSection = () => {
 
   const processImage = (file: File) => {
     setUploadedFile(file);
+    setValidationError(null);
 
     const reader = new FileReader();
     reader.onload = (e) => {
@@ -90,6 +220,17 @@ export const DetectionSection = () => {
   const analyzeImage = async () => {
     if (!uploadedFile) return;
 
+    // Gate the demo results to leaf-like images only.
+    const validation = await validateWheatLeafPhoto(uploadedFile);
+    if (!validation.ok) {
+      setResult(null);
+      setIsAnalyzing(false);
+      setScanProgress(0);
+      setValidationError(validation.message);
+      return;
+    }
+
+    setValidationError(null);
     setIsAnalyzing(true);
     setScanProgress(0);
 
@@ -139,16 +280,21 @@ export const DetectionSection = () => {
   const resetDetection = () => {
     setUploadedImage(null);
     setUploadedFile(null);
+    setValidationError(null);
     setResult(null);
     setScanProgress(0);
   };
 
   const getSeverityColor = (severity: string) => {
     switch (severity) {
-      case "Low": return "text-primary bg-primary/10";
-      case "Medium": return "text-secondary bg-secondary/20";
-      case "High": return "text-destructive bg-destructive/10";
-      default: return "text-muted-foreground bg-muted";
+      case "Low":
+        return "text-primary bg-primary/10";
+      case "Medium":
+        return "text-secondary bg-secondary/20";
+      case "High":
+        return "text-destructive bg-destructive/10";
+      default:
+        return "text-muted-foreground bg-muted";
     }
   };
 
@@ -258,14 +404,20 @@ export const DetectionSection = () => {
             <div className="glass-card p-6">
               <h3 className="text-lg font-semibold text-foreground mb-4">Analysis Results</h3>
               
-              {!result ? (
+              {validationError ? (
+                <div className="h-full min-h-[280px] flex flex-col items-center justify-center text-center">
+                  <div className="w-16 h-16 rounded-2xl bg-destructive/10 flex items-center justify-center mb-4">
+                    <AlertCircle className="w-8 h-8 text-destructive" />
+                  </div>
+                  <p className="text-foreground font-medium mb-2">Not a wheat leaf photo</p>
+                  <p className="text-sm text-muted-foreground max-w-sm">{validationError}</p>
+                </div>
+              ) : !result ? (
                 <div className="h-full min-h-[280px] flex flex-col items-center justify-center text-center">
                   <div className="w-16 h-16 rounded-2xl bg-muted flex items-center justify-center mb-4">
                     <ImageIcon className="w-8 h-8 text-muted-foreground" />
                   </div>
-                  <p className="text-muted-foreground">
-                    Upload an image and click "Analyze Now" to see results
-                  </p>
+                  <p className="text-muted-foreground">Upload an image and click "Analyze Now" to see results</p>
                 </div>
               ) : (
                 <div className="space-y-6 animate-scale-in">
@@ -290,7 +442,7 @@ export const DetectionSection = () => {
                       <span className="text-sm font-semibold text-primary">{result.confidence}%</span>
                     </div>
                     <div className="h-3 bg-muted rounded-full overflow-hidden">
-                      <div 
+                      <div
                         className="h-full bg-gradient-to-r from-primary to-accent rounded-full transition-all duration-1000"
                         style={{ width: `${result.confidence}%` }}
                       />
