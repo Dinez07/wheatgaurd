@@ -1,6 +1,8 @@
 import { useState, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Upload, Loader2, AlertCircle, CheckCircle, Image as ImageIcon, X, Sparkles } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
 
 interface DetectionResult {
   diseaseName: string;
@@ -10,173 +12,16 @@ interface DetectionResult {
   prevention: string;
 }
 
-const diseaseDatabase: DetectionResult[] = [
-  {
-    diseaseName: "Leaf Rust",
-    severity: "Medium",
-    confidence: 92.5,
-    treatment: "Apply fungicides containing propiconazole or tebuconazole. Remove infected leaves immediately.",
-    prevention: "Use resistant wheat varieties. Ensure proper spacing for air circulation. Avoid excessive nitrogen fertilization.",
-  },
-  {
-    diseaseName: "Stem Rust",
-    severity: "High",
-    confidence: 88.3,
-    treatment: "Apply triazole-based fungicides immediately. Remove and destroy infected plants to prevent spread.",
-    prevention: "Plant resistant varieties. Monitor fields regularly during warm, humid weather. Implement crop rotation.",
-  },
-  {
-    diseaseName: "Powdery Mildew",
-    severity: "Low",
-    confidence: 94.7,
-    treatment: "Apply sulfur-based fungicides or systemic fungicides like triadimefon. Improve air circulation.",
-    prevention: "Avoid excessive nitrogen fertilization. Ensure proper plant spacing. Use resistant wheat varieties.",
-  },
-  {
-    diseaseName: "Septoria Leaf Blotch",
-    severity: "Medium",
-    confidence: 89.1,
-    treatment: "Apply fungicides containing azoxystrobin or propiconazole at early symptoms. Remove crop debris.",
-    prevention: "Use certified disease-free seeds. Practice crop rotation. Avoid overhead irrigation.",
-  },
-];
-
-const rgbToHsv = (r: number, g: number, b: number) => {
-  const max = Math.max(r, g, b);
-  const min = Math.min(r, g, b);
-  const d = max - min;
-
-  let h = 0;
-  if (d !== 0) {
-    switch (max) {
-      case r:
-        h = ((g - b) / d) % 6;
-        break;
-      case g:
-        h = (b - r) / d + 2;
-        break;
-      case b:
-        h = (r - g) / d + 4;
-        break;
-    }
-    h *= 60;
-    if (h < 0) h += 360;
-  }
-
-  const s = max === 0 ? 0 : d / max;
-  const v = max;
-  return { h, s, v };
-};
-
-const validateWheatLeafPhoto = async (file: File) => {
-  // NOTE: This is a lightweight demo heuristic (not real AI).
-  // It tries to reject obvious non-leaf photos (sky/people/objects) so we only show disease results for leaf-like images.
-  const canvas = document.createElement("canvas");
-  const ctx = canvas.getContext("2d", { willReadFrequently: true });
-  if (!ctx) {
-    return { ok: true as const };
-  }
-
-  let width = 96;
-  let height = 96;
-
-  try {
-    // Downscale at decode time for speed
-    const bitmap = await createImageBitmap(file, {
-      resizeWidth: width,
-      resizeHeight: height,
-      resizeQuality: "low",
-    } as any);
-
-    width = bitmap.width;
-    height = bitmap.height;
-    canvas.width = width;
-    canvas.height = height;
-
-    ctx.drawImage(bitmap, 0, 0, width, height);
-    bitmap.close();
-  } catch {
-    // If createImageBitmap fails, we allow analysis rather than hard-blocking.
-    return { ok: true as const };
-  }
-
-  const { data } = ctx.getImageData(0, 0, width, height);
-
-  let considered = 0;
-  let leafLike = 0;
-  let greenDominant = 0;
-  let blueLike = 0;
-  let neutralLike = 0;
-
-  for (let i = 0; i < data.length; i += 4) {
-    const r = data[i] / 255;
-    const g = data[i + 1] / 255;
-    const b = data[i + 2] / 255;
-    const a = data[i + 3] / 255;
-
-    if (a < 0.8) continue;
-
-    const { h, s, v } = rgbToHsv(r, g, b);
-
-    // ignore near-black / near-white pixels (background)
-    const isVeryDark = v < 0.08;
-    const isNearWhite = v > 0.92 && s < 0.12;
-    if (isVeryDark) continue;
-
-    considered += 1;
-
-    if (isNearWhite) neutralLike += 1;
-
-    const isLeafHue = h >= 15 && h <= 165; // yellow→green range
-    const isRustHue = h <= 40 || h >= 340; // orange/red range
-    const isBlueHue = h >= 190 && h <= 260; // sky-ish blues
-
-    if (isBlueHue && s > 0.18 && v > 0.2) blueLike += 1;
-
-    // Strong green dominance is a good hint for leaf close-ups
-    const isGreenDominant = g > r * 1.08 && g > b * 1.08 && s > 0.12 && v > 0.12;
-    if (isGreenDominant) greenDominant += 1;
-
-    // Accept both healthy-leaf greens/yellows and rust/orange patches, but require some saturation.
-    if ((isLeafHue && s > 0.14 && v > 0.12) || (isRustHue && s > 0.22 && v > 0.12)) {
-      leafLike += 1;
-    }
-  }
-
-  if (considered < 400) {
-    return {
-      ok: false as const,
-      message: "Image is too unclear. Please upload a sharp, close-up wheat leaf photo.",
-    };
-  }
-
-  const leafScore = leafLike / considered;
-  const greenScore = greenDominant / considered;
-  const blueScore = blueLike / considered;
-  const neutralScore = neutralLike / considered;
-
-  // Heuristic thresholds (tuned to reject obvious non-wheat / non-leaf photos).
-  const ok = (leafScore >= 0.42 || greenScore >= 0.26) && blueScore <= 0.25 && neutralScore <= 0.7;
-
-  if (!ok) {
-    return {
-      ok: false as const,
-      message:
-        "This doesn't look like a close-up wheat leaf photo. Please upload a clear wheat leaf image (close-up), not a field/sky/people/object photo.",
-    };
-  }
-
-  return { ok: true as const };
-};
+// Removed local validation - now handled by Gemini AI
 
 export const DetectionSection = () => {
   const [isDragging, setIsDragging] = useState(false);
   const [uploadedImage, setUploadedImage] = useState<string | null>(null);
-  const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [validationError, setValidationError] = useState<string | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [result, setResult] = useState<DetectionResult | null>(null);
   const [scanProgress, setScanProgress] = useState(0);
+  const { toast } = useToast();
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -205,7 +50,6 @@ export const DetectionSection = () => {
   }, []);
 
   const processImage = (file: File) => {
-    setUploadedFile(file);
     setValidationError(null);
 
     const reader = new FileReader();
@@ -218,76 +62,95 @@ export const DetectionSection = () => {
   };
 
   const analyzeImage = async () => {
-    if (!uploadedFile) return;
-
-    // Gate the demo results to leaf-like images only.
-    const validation = await validateWheatLeafPhoto(uploadedFile);
-    if (!validation.ok) {
-      setResult(null);
-      setIsAnalyzing(false);
-      setScanProgress(0);
-      setValidationError(validation.message);
-      return;
-    }
+    if (!uploadedImage) return;
 
     setValidationError(null);
     setIsAnalyzing(true);
     setScanProgress(0);
 
-    // Simulate AI analysis with progress
+    // Progress animation
     const progressInterval = setInterval(() => {
       setScanProgress((prev) => {
-        if (prev >= 100) {
-          clearInterval(progressInterval);
-          return 100;
+        if (prev >= 90) {
+          return prev;
         }
-        return prev + Math.random() * 15;
+        return prev + Math.random() * 10;
       });
-    }, 200);
-
-    // Simulate API call
-    await new Promise((resolve) => setTimeout(resolve, 2500));
-
-    clearInterval(progressInterval);
-    setScanProgress(100);
-
-    // Deterministic "demo" prediction based on the uploaded image bytes.
-    // NOTE: We mix multiple hash bytes (not just the first byte) so different images are much less likely to collide.
-    let index = 0;
-    let jitter = 0;
+    }, 300);
 
     try {
-      const buffer = await uploadedFile.arrayBuffer();
-      const digest = await crypto.subtle.digest("SHA-256", buffer);
-      const bytes = new Uint8Array(digest);
+      const { data, error } = await supabase.functions.invoke("analyze-wheat-disease", {
+        body: { imageBase64: uploadedImage },
+      });
 
-      // 32-bit seed from 4 bytes (little-endian), coerced to unsigned
-      const seed =
-        (bytes[0] | (bytes[1] << 8) | (bytes[2] << 16) | (bytes[3] << 24)) >>> 0;
+      clearInterval(progressInterval);
+      setScanProgress(100);
 
-      index = seed % diseaseDatabase.length;
+      if (error) {
+        console.error("Edge function error:", error);
+        toast({
+          title: "Analysis Failed",
+          description: error.message || "Failed to analyze image",
+          variant: "destructive",
+        });
+        setIsAnalyzing(false);
+        return;
+      }
 
-      // [-3, +3] jitter, derived from hash so same image => same result
-      const jitterSeed = bytes[4] ^ bytes[5];
-      jitter = (jitterSeed / 255) * 6 - 3;
-    } catch {
-      index = Math.floor(Math.random() * diseaseDatabase.length);
-      jitter = Math.random() * 6 - 3;
+      if (data.error) {
+        toast({
+          title: "Analysis Error",
+          description: data.error,
+          variant: "destructive",
+        });
+        setIsAnalyzing(false);
+        return;
+      }
+
+      // Check if it's a wheat leaf
+      if (!data.isWheatLeaf) {
+        setValidationError(data.message || "This doesn't appear to be a wheat leaf photo. Please upload a clear image of a wheat leaf.");
+        setResult(null);
+        setIsAnalyzing(false);
+        return;
+      }
+
+      // Check for healthy wheat
+      if (data.disease?.name === "Healthy" || !data.disease?.name) {
+        setResult({
+          diseaseName: "Healthy",
+          severity: "Low",
+          confidence: data.disease?.confidence || 95,
+          treatment: "No treatment required. The wheat leaf appears healthy.",
+          prevention: "Continue regular monitoring and maintain good agricultural practices.",
+        });
+        setIsAnalyzing(false);
+        return;
+      }
+
+      // Disease detected
+      setResult({
+        diseaseName: data.disease.name,
+        severity: data.disease.severity || "Medium",
+        confidence: data.disease.confidence || 85,
+        treatment: data.disease.treatment || "Consult an agricultural expert for specific treatment recommendations.",
+        prevention: data.disease.prevention || "Implement crop rotation and use disease-resistant varieties.",
+      });
+      setIsAnalyzing(false);
+    } catch (err) {
+      clearInterval(progressInterval);
+      console.error("Analysis error:", err);
+      toast({
+        title: "Connection Error",
+        description: "Failed to connect to the analysis service. Please try again.",
+        variant: "destructive",
+      });
+      setIsAnalyzing(false);
     }
-
-    const base = diseaseDatabase[index];
-    const detectedDisease = {
-      ...base,
-      confidence: Math.round((base.confidence + jitter) * 10) / 10,
-    };
-
-    setResult(detectedDisease);
-    setIsAnalyzing(false);
   };
 
   const resetDetection = () => {
     setUploadedImage(null);
-    setUploadedFile(null);
     setValidationError(null);
     setResult(null);
     setScanProgress(0);
