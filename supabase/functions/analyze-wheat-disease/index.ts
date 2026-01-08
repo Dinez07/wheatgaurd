@@ -5,17 +5,56 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+// Maximum allowed base64 size (~10MB image = ~13MB base64)
+const MAX_BASE64_SIZE = 13 * 1024 * 1024;
+
+// Validate base64 image format
+function validateImageBase64(imageBase64: unknown): { valid: boolean; error?: string } {
+  if (!imageBase64) {
+    return { valid: false, error: "No image provided" };
+  }
+
+  if (typeof imageBase64 !== "string") {
+    return { valid: false, error: "Invalid image format: expected string" };
+  }
+
+  // Check for valid data URL prefix for supported image types
+  const base64Regex = /^data:image\/(jpeg|jpg|png|webp|gif);base64,/;
+  if (!base64Regex.test(imageBase64)) {
+    return { valid: false, error: "Invalid image format. Supported formats: JPEG, PNG, WEBP, GIF" };
+  }
+
+  // Check size
+  if (imageBase64.length > MAX_BASE64_SIZE) {
+    return { valid: false, error: "Image too large. Maximum size is 10MB" };
+  }
+
+  return { valid: true };
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    const { imageBase64 } = await req.json();
-
-    if (!imageBase64) {
+    // Check Content-Length header first to reject large requests early
+    const contentLength = req.headers.get("content-length");
+    if (contentLength && parseInt(contentLength) > 15 * 1024 * 1024) {
       return new Response(
-        JSON.stringify({ error: "No image provided" }),
+        JSON.stringify({ error: "Request too large. Maximum size is 10MB" }),
+        { status: 413, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const body = await req.json();
+    const { imageBase64 } = body;
+
+    // Validate image input
+    const validation = validateImageBase64(imageBase64);
+    if (!validation.valid) {
+      return new Response(
+        JSON.stringify({ error: validation.error }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
