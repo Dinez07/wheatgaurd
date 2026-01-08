@@ -251,7 +251,8 @@ export const DetectionSection = () => {
     clearInterval(progressInterval);
     setScanProgress(100);
 
-    // Deterministic "demo" prediction based on the uploaded image bytes
+    // Deterministic "demo" prediction based on the uploaded image bytes.
+    // NOTE: We mix multiple hash bytes (not just the first byte) so different images are much less likely to collide.
     let index = 0;
     let jitter = 0;
 
@@ -259,9 +260,16 @@ export const DetectionSection = () => {
       const buffer = await uploadedFile.arrayBuffer();
       const digest = await crypto.subtle.digest("SHA-256", buffer);
       const bytes = new Uint8Array(digest);
-      index = bytes[0] % diseaseDatabase.length;
+
+      // 32-bit seed from 4 bytes (little-endian), coerced to unsigned
+      const seed =
+        (bytes[0] | (bytes[1] << 8) | (bytes[2] << 16) | (bytes[3] << 24)) >>> 0;
+
+      index = seed % diseaseDatabase.length;
+
       // [-3, +3] jitter, derived from hash so same image => same result
-      jitter = (bytes[1] / 255) * 6 - 3;
+      const jitterSeed = bytes[4] ^ bytes[5];
+      jitter = (jitterSeed / 255) * 6 - 3;
     } catch {
       index = Math.floor(Math.random() * diseaseDatabase.length);
       jitter = Math.random() * 6 - 3;
