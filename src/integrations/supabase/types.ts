@@ -14,16 +14,270 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      comments: {
+        Row: {
+          content: string
+          created_at: string
+          disease_report_id: string | null
+          id: string
+          research_update_id: string | null
+          user_id: string
+        }
+        Insert: {
+          content: string
+          created_at?: string
+          disease_report_id?: string | null
+          id?: string
+          research_update_id?: string | null
+          user_id: string
+        }
+        Update: {
+          content?: string
+          created_at?: string
+          disease_report_id?: string | null
+          id?: string
+          research_update_id?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "comments_disease_report_id_fkey"
+            columns: ["disease_report_id"]
+            isOneToOne: false
+            referencedRelation: "disease_reports"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "comments_research_update_id_fkey"
+            columns: ["research_update_id"]
+            isOneToOne: false
+            referencedRelation: "research_updates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      disease_reports: {
+        Row: {
+          ai_confidence: number | null
+          ai_prediction: string | null
+          created_at: string
+          farmer_id: string
+          id: string
+          image_url: string | null
+          location: string | null
+          severity: string | null
+          status: string | null
+          symptoms: string
+          updated_at: string
+        }
+        Insert: {
+          ai_confidence?: number | null
+          ai_prediction?: string | null
+          created_at?: string
+          farmer_id: string
+          id?: string
+          image_url?: string | null
+          location?: string | null
+          severity?: string | null
+          status?: string | null
+          symptoms: string
+          updated_at?: string
+        }
+        Update: {
+          ai_confidence?: number | null
+          ai_prediction?: string | null
+          created_at?: string
+          farmer_id?: string
+          id?: string
+          image_url?: string | null
+          location?: string | null
+          severity?: string | null
+          status?: string | null
+          symptoms?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      farmer_profiles: {
+        Row: {
+          created_at: string
+          crop_type: string | null
+          farming_experience_years: number | null
+          id: string
+          location: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          crop_type?: string | null
+          farming_experience_years?: number | null
+          id?: string
+          location?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          crop_type?: string | null
+          farming_experience_years?: number | null
+          id?: string
+          location?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          avatar_url: string | null
+          created_at: string
+          email: string | null
+          id: string
+          name: string
+          phone: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          avatar_url?: string | null
+          created_at?: string
+          email?: string | null
+          id?: string
+          name: string
+          phone?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          avatar_url?: string | null
+          created_at?: string
+          email?: string | null
+          id?: string
+          name?: string
+          phone?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      research_updates: {
+        Row: {
+          cause: string | null
+          created_at: string
+          disease_name: string | null
+          disease_report_id: string | null
+          id: string
+          is_verified: boolean | null
+          preventive_measures: string | null
+          researcher_id: string
+          symptoms: string | null
+          title: string
+          treatment: string | null
+          updated_at: string
+        }
+        Insert: {
+          cause?: string | null
+          created_at?: string
+          disease_name?: string | null
+          disease_report_id?: string | null
+          id?: string
+          is_verified?: boolean | null
+          preventive_measures?: string | null
+          researcher_id: string
+          symptoms?: string | null
+          title: string
+          treatment?: string | null
+          updated_at?: string
+        }
+        Update: {
+          cause?: string | null
+          created_at?: string
+          disease_name?: string | null
+          disease_report_id?: string | null
+          id?: string
+          is_verified?: boolean | null
+          preventive_measures?: string | null
+          researcher_id?: string
+          symptoms?: string | null
+          title?: string
+          treatment?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "research_updates_disease_report_id_fkey"
+            columns: ["disease_report_id"]
+            isOneToOne: false
+            referencedRelation: "disease_reports"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      researcher_profiles: {
+        Row: {
+          created_at: string
+          field_of_expertise: string | null
+          id: string
+          institution: string | null
+          research_id: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          field_of_expertise?: string | null
+          id?: string
+          institution?: string | null
+          research_id?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          field_of_expertise?: string | null
+          id?: string
+          institution?: string | null
+          research_id?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      user_roles: {
+        Row: {
+          created_at: string
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      get_user_role: {
+        Args: { _user_id: string }
+        Returns: Database["public"]["Enums"]["app_role"]
+      }
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
     }
     Enums: {
-      [_ in never]: never
+      app_role: "farmer" | "researcher"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +404,8 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      app_role: ["farmer", "researcher"],
+    },
   },
 } as const
