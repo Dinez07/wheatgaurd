@@ -1,6 +1,8 @@
-import { Leaf, Menu, X } from "lucide-react";
+import { Leaf, Menu, X, LogIn } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { useAuth } from "@/hooks/useAuth";
 
 const navLinks = [
   { name: "Problem", href: "#problem" },
@@ -13,6 +15,8 @@ const navLinks = [
 
 export const Navbar = () => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const navigate = useNavigate();
+  const { user, role } = useAuth();
 
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 bg-card/80 backdrop-blur-xl border-b border-border/50">
@@ -41,15 +45,32 @@ export const Navbar = () => {
             ))}
           </div>
 
-          {/* CTA Button */}
-          <div className="hidden md:block">
-            <Button 
-              variant="default" 
-              size="default"
-              onClick={() => document.getElementById("detection")?.scrollIntoView({ behavior: "smooth" })}
-            >
-              Try Detection
-            </Button>
+          {/* CTA Buttons */}
+          <div className="hidden md:flex items-center gap-2">
+            {user ? (
+              <Button 
+                variant="default"
+                onClick={() => navigate(role === 'farmer' ? '/farmer-dashboard' : '/researcher-dashboard')}
+              >
+                Dashboard
+              </Button>
+            ) : (
+              <>
+                <Button 
+                  variant="outline"
+                  onClick={() => navigate('/auth')}
+                >
+                  <LogIn className="mr-2 h-4 w-4" />
+                  Login
+                </Button>
+                <Button 
+                  variant="default"
+                  onClick={() => document.getElementById("detection")?.scrollIntoView({ behavior: "smooth" })}
+                >
+                  Try Detection
+                </Button>
+              </>
+            )}
           </div>
 
           {/* Mobile Menu Button */}
@@ -79,17 +100,43 @@ export const Navbar = () => {
                   {link.name}
                 </a>
               ))}
-              <div className="pt-2">
-                <Button 
-                  variant="default" 
-                  className="w-full"
-                  onClick={() => {
-                    setMobileMenuOpen(false);
-                    document.getElementById("detection")?.scrollIntoView({ behavior: "smooth" });
-                  }}
-                >
-                  Try Detection
-                </Button>
+              <div className="pt-2 space-y-2">
+                {user ? (
+                  <Button 
+                    variant="default" 
+                    className="w-full"
+                    onClick={() => {
+                      setMobileMenuOpen(false);
+                      navigate(role === 'farmer' ? '/farmer-dashboard' : '/researcher-dashboard');
+                    }}
+                  >
+                    Dashboard
+                  </Button>
+                ) : (
+                  <>
+                    <Button 
+                      variant="outline" 
+                      className="w-full"
+                      onClick={() => {
+                        setMobileMenuOpen(false);
+                        navigate('/auth');
+                      }}
+                    >
+                      <LogIn className="mr-2 h-4 w-4" />
+                      Login / Register
+                    </Button>
+                    <Button 
+                      variant="default" 
+                      className="w-full"
+                      onClick={() => {
+                        setMobileMenuOpen(false);
+                        document.getElementById("detection")?.scrollIntoView({ behavior: "smooth" });
+                      }}
+                    >
+                      Try Detection
+                    </Button>
+                  </>
+                )}
               </div>
             </div>
           </div>
